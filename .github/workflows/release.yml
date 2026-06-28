@@ -35,6 +35,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           pyinstaller --noconfirm --windowed --name PoBongoCat \
+            --icon assets/icon.icns \
             --add-data "assets:assets" --collect-all pynput \
             --osx-bundle-identifier com.zenuie.pobongocat run.py
           /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" \
@@ -45,6 +46,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           pyinstaller --noconfirm --windowed --onefile --name PoBongoCat `
+            --icon assets/icon.ico `
             --add-data "assets;assets" --collect-all pynput run.py
 
       - name: Upload to release
