@@ -1,0 +1,1 @@
+"""Po desktop pet package."""

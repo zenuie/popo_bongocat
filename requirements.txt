@@ -1,0 +1,6 @@
+PySide6>=6.6
+pynput>=1.7
+
+# Optional, Phase 2 only (native "ghost" full click-through):
+# pywin32 ; platform_system == "Windows"
+# pyobjc-framework-Cocoa ; platform_system == "Darwin"
