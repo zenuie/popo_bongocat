@@ -14,17 +14,16 @@ from PySide6.QtWidgets import QWidget
 from . import config, settings
 from .animator import Animator
 from .desk import Desk
+from . import skins
 from .follow import pointer_to_offset
 from .hands import Hands
-from .resources import resource_path
 from .sprites import scale_for_display
 
 
 class PetWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self._body = QPixmap(resource_path(config.asset_path("parts/po_body.png")))
-        glove = QPixmap(resource_path(config.asset_path("parts/po_hand.png")))
+        self._body, glove = self._load_skin_pixmaps(config.ACTIVE_SKIN)
 
         self._setup_window()
 
@@ -159,6 +158,28 @@ class PetWindow(QWidget):
 
         self._desk.draw(p)
         self._hands.draw(p, self._lean)
+
+    # ---- skins (issue #5) ---------------------------------------------
+    @staticmethod
+    def _load_skin_pixmaps(name: str):
+        """Return (body, glove) pixmaps for `name`, falling back to the default
+        skin if the named skin is missing or its images fail to load."""
+        assets = skins.skin_assets(name) or skins.skin_assets(skins.DEFAULT)
+        body, glove = QPixmap(assets[0]), QPixmap(assets[1])
+        if body.isNull() or glove.isNull():
+            assets = skins.skin_assets(skins.DEFAULT)
+            body, glove = QPixmap(assets[0]), QPixmap(assets[1])
+        return body, glove
+
+    def set_skin(self, name: str) -> None:
+        body, glove = self._load_skin_pixmaps(name)
+        config.ACTIVE_SKIN = name
+        self._body = body
+        self._hands.set_glove(glove)
+        self._apply_mask()             # the body silhouette may differ
+        self._sprite_factor = 0.0      # force a sprite rebuild at the new art
+        self.update()
+        settings.save(skin=name)
 
     # ---- live scale (issue #4) ----------------------------------------
     def set_scale(self, scale: float) -> None:

@@ -65,6 +65,15 @@ class Hands:
         self._dpr = dpr or 1.0
         self._glove_scaled = scale_for_display(self.glove, self._gw, self._gh, self._dpr)
 
+    def set_glove(self, glove_pixmap) -> None:
+        """Swap the glove art (issue #5: skins). The scaled copy is rebuilt by
+        the next prepare()."""
+        self.glove = glove_pixmap
+        self._gw = glove_pixmap.width() * config.HAND_SCALE
+        self._gh = glove_pixmap.height() * config.HAND_SCALE
+        self._glove_scaled = glove_pixmap
+        self._dpr = 1.0
+
     def press_key(self, side: str, target, now) -> None:
         (self.left if side == "left" else self.right).activate(target, now)
 

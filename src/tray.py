@@ -1,23 +1,20 @@
-"""System-tray icon + menu: size presets, reset position, quit."""
-from PySide6.QtGui import QActionGroup, QIcon
+"""System-tray icon + menu: open settings, reset position, quit."""
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from . import config
 from .resources import resource_path
+from .settings_dialog import SettingsDialog
 
-SCALE_PRESETS = [("75%", 0.75), ("100%", 1.0), ("125%", 1.25), ("150%", 1.5)]
 
-
-def _add_scale_menu(menu: QMenu, window) -> None:
-    sub = menu.addMenu("尺寸")
-    group = QActionGroup(sub)
-    group.setExclusive(True)
-    for label, value in SCALE_PRESETS:
-        action = sub.addAction(label)
-        action.setCheckable(True)
-        action.setChecked(abs(config.PET_SCALE - value) < 1e-3)
-        group.addAction(action)
-        action.triggered.connect(lambda _checked=False, v=value: window.set_scale(v))
+def _open_settings(window) -> None:
+    dialog = getattr(window, "_settings_dialog", None)
+    if dialog is None:
+        dialog = SettingsDialog(window)
+        window._settings_dialog = dialog       # keep it alive
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
 
 
 def build_tray(app: QApplication, window) -> QSystemTrayIcon:
@@ -25,7 +22,8 @@ def build_tray(app: QApplication, window) -> QSystemTrayIcon:
     tray.setToolTip("Po 桌寵")
 
     menu = QMenu()
-    _add_scale_menu(menu, window)
+    settings_action = menu.addAction("設定…")
+    settings_action.triggered.connect(lambda: _open_settings(window))
     menu.addSeparator()
     reset = menu.addAction("重置位置")
     reset.triggered.connect(window.move_to_default_corner)
