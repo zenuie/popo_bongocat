@@ -1,4 +1,14 @@
 """Central tuning constants for Po. Tweak the handfeel / layout here."""
+from . import settings as _settings
+
+# --- User settings (issues #4/#5). All geometry below is authored at scale
+#     1.0; PET_SCALE is applied as one paint transform in the window, so these
+#     constants never need to be rescaled individually. PET_SCALE is mutated
+#     live by PetWindow.set_scale(). ---
+_loaded = _settings.load()
+PET_SCALE = _loaded["scale"]
+ACTIVE_SKIN = _loaded["skin"]
+FOLLOW_MOUSE = _loaded["follow_mouse"]
 
 # --- Scene canvas: Po (body) behind, keyboard + mouse on the desk, hands in front ---
 CANVAS_WIDTH = 372
