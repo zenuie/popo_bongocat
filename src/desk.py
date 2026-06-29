@@ -48,6 +48,9 @@ class Desk:
         self.keyboard.update()
         self.mouse.update()
 
+    def is_animating(self) -> bool:
+        return self.keyboard.is_animating() or self.mouse.is_animating()
+
     def draw(self, painter) -> None:
         self._draw_rotated(painter, config.DESK_ROT_CENTER, self.keyboard.draw)
         mx, my, mw, mh = config.MOUSE_RECT

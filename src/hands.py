@@ -37,6 +37,11 @@ class _Hand:
         if self.tap < 0.02:
             self.tap = 0.0
 
+    def is_animating(self) -> bool:
+        """True while the glove is still moving toward its target or tapping."""
+        return (abs(self.tx - self.x) > 0.5 or abs(self.ty - self.y) > 0.5
+                or self.tap > 0.0)
+
 
 class Hands:
     def __init__(self, glove_pixmap) -> None:
@@ -52,6 +57,9 @@ class Hands:
     def update(self, now) -> None:
         self.left.update(now)
         self.right.update(now)
+
+    def is_animating(self) -> bool:
+        return self.left.is_animating() or self.right.is_animating()
 
     # ---- drawing ----
     def draw(self, painter, lean_x: float = 0.0) -> None:

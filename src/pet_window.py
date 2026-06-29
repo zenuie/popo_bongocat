@@ -31,7 +31,10 @@ class PetWindow(QWidget):
         self._desk = Desk()
         self._hands = Hands(glove)
 
-        self._body_mask: Optional[QRegion] = self._build_body_mask()
+        # Mask the click/hit region ONCE to the area Po can ever occupy, instead
+        # of rebuilding + re-applying it every frame (issue #1: idle CPU).
+        self.setMask(self._build_static_mask())
+        self._last_paint_pos: Optional[tuple[int, int]] = None
 
         # body lean (toward the active hand's target)
         self._lean = 0.0
@@ -82,6 +85,21 @@ class PetWindow(QWidget):
         region.translate(int(round(config.PO_CENTER_X - bw / 2)), config.PO_BODY_TOP)
         return region
 
+    def _build_static_mask(self) -> QRegion:
+        """A single mask covering every position the body can occupy — it leans
+        +/-BODY_LEAN_MAX horizontally and floats/nods vertically — unioned with
+        the fixed desk. Recomputing this mask each frame was the dominant idle
+        cost, so we sweep the range once here and never call setMask again."""
+        body = self._build_body_mask()
+        swept = QRegion()
+        x_max = config.BODY_LEAN_MAX
+        y_lo = -int(config.FLOAT_AMPLITUDE) - 1
+        y_hi = int(config.FLOAT_AMPLITUDE + config.NOD_DIP) + 1
+        for dx in range(-x_max, x_max + 1, 10):
+            for dy in (y_lo, 0, y_hi):
+                swept = swept.united(body.translated(dx, dy))
+        return swept.united(self._desk.mask_region())
+
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
@@ -103,11 +121,19 @@ class PetWindow(QWidget):
         if now - self._lean_last > config.HAND_RETURN_MS / 1000.0:
             self._lean_target = 0.0
         self._lean += (self._lean_target - self._lean) * config.BODY_LEAN_EASE
-        if self._body_mask is not None:
-            dx = int(round(self._lean))
-            dy = int(round(self._animator.offset_y))
-            self.setMask(self._body_mask.translated(dx, dy).united(self._desk.mask_region()))
-        self.update()
+        if self._needs_repaint():
+            self.update()
+
+    def _needs_repaint(self) -> bool:
+        """Repaint only when the rendered scene would actually differ. An idle
+        Po only breathes, so its rounded position changes a few times a second
+        rather than 60 — the rest of the frames are skipped (issue #1)."""
+        pos = (round(config.PO_CENTER_X + self._lean),
+               round(config.PO_BODY_TOP + self._animator.offset_y))
+        if pos != self._last_paint_pos:
+            self._last_paint_pos = pos
+            return True
+        return self._hands.is_animating() or self._desk.is_animating()
 
     # ---- global activity (Bongo Cat) ---------------------------------
     def _lean_to(self, target_x: float, now: float) -> None:

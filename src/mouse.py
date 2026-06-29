@@ -35,6 +35,10 @@ class MouseGraphic:
         self._right = self._right * decay if self._right * decay >= 0.01 else 0.0
         self._wheel = self._wheel * decay if self._wheel * decay >= 0.01 else 0.0
 
+    def is_animating(self) -> bool:
+        """True while any button/wheel is still lit (and thus needs redrawing)."""
+        return self._left > 0.0 or self._right > 0.0 or self._wheel > 0.0
+
     def draw(self, p) -> None:
         x, y, w, h = self._rect
         dip = config.KEY_DIP * 0.5 * max(self._left, self._right, self._wheel)

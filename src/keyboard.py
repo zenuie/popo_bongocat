@@ -96,6 +96,10 @@ class KeyboardGraphic:
             if level * decay >= 0.01
         }
 
+    def is_animating(self) -> bool:
+        """True while any key is still lit (and thus needs redrawing)."""
+        return bool(self._levels)
+
     def draw(self, p) -> None:
         x, y, w, h = self._chassis
         p.setPen(QPen(QColor(config.COLOR_OUTLINE), 1.5))
