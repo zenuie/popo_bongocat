@@ -73,3 +73,21 @@ def test_hand_returns_to_rest_and_settles():
     for i in range(2000):
         hand.update(now=1000.0 + i * 0.05)
     assert hand.is_animating() is False
+
+
+# ---- mouse-follow tracking (issue #3) -------------------------------------
+def test_track_does_not_press_down():
+    hand = _Hand(config.LEFT_REST, config.LEFT_SHOULDER)
+    hand.track((52.0, 198.0), now=1000.0)
+    assert hand.tap == 0.0            # resting on the mouse, not tapping it
+    assert hand.is_animating() is True
+
+
+def test_tracked_hand_returns_to_rest_when_cursor_goes_still():
+    hand = _Hand(config.LEFT_REST, config.LEFT_SHOULDER)
+    hand.track((52.0, 198.0), now=1000.0)
+    for i in range(2000):            # stop tracking; time marches on
+        hand.update(now=1000.0 + i * 0.05)
+    assert abs(hand.x - config.LEFT_REST[0]) < 1.0
+    assert abs(hand.y - config.LEFT_REST[1]) < 1.0
+    assert hand.is_animating() is False

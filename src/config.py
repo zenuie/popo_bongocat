@@ -70,6 +70,13 @@ MOUSE_PRESS_HALF_LIFE = 0.09
 DRAG_THRESHOLD = 5
 REACTION_THROTTLE_S = 0.018          # min seconds between body nods
 
+# --- Mouse-follow (issue #3): the desk mouse echoes the real cursor as a small,
+#     scaled-down wiggle, and the near hand rests on it while the cursor moves ---
+MOUSE_FOLLOW_RANGE_X = 18.0          # px the desk mouse can drift horizontally
+MOUSE_FOLLOW_RANGE_Y = 9.0           # px vertically
+MOUSE_FOLLOW_EASE = 0.18             # how fast the offset eases toward target
+MOUSE_FOLLOW_IDLE_MS = 700           # cursor-still gap before the hand lets go
+
 # --- Palette (matches Po: orange accents on charcoal) ---
 COLOR_CHASSIS = "#26262B"
 COLOR_KEY = "#3B3B43"

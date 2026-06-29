@@ -29,6 +29,12 @@ class _Hand:
         self.tap = 1.0
         self.last_active = now
 
+    def track(self, target, now) -> None:
+        """Rest on a moving target (the mouse) without the press-down dip."""
+        self.tx = float(target[0])
+        self.ty = max(float(target[1]), config.HAND_TIP_Y_MIN)
+        self.last_active = now
+
     def update(self, now) -> None:
         if now - self.last_active > config.HAND_RETURN_MS / 1000.0:
             self.tx, self.ty = float(self.rest[0]), float(self.rest[1])
@@ -61,6 +67,9 @@ class Hands:
 
     def press_key(self, side: str, target, now) -> None:
         (self.left if side == "left" else self.right).activate(target, now)
+
+    def track(self, side: str, target, now) -> None:
+        (self.left if side == "left" else self.right).track(target, now)
 
     def update(self, now) -> None:
         self.left.update(now)

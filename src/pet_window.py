@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QWidget
 from . import config, settings
 from .animator import Animator
 from .desk import Desk
+from .follow import pointer_to_offset
 from .hands import Hands
 from .resources import resource_path
 from .sprites import scale_for_display
@@ -54,6 +55,11 @@ class PetWindow(QWidget):
         self._press_global = None
         self._press_window = None
         self._last_nod = 0.0
+
+        # mouse-follow (issue #3); _listener is assigned by main after setup
+        self._listener = None
+        self._last_pointer = None
+        self._last_pointer_move = -1e9
 
         self.move_to_default_corner()
         self._animator.start()
@@ -169,6 +175,7 @@ class PetWindow(QWidget):
 
     def _on_frame(self) -> None:
         now = time.monotonic()
+        self._update_mouse_follow(now)
         self._hands.update(now)
         self._desk.update()
         if now - self._lean_last > config.HAND_RETURN_MS / 1000.0:
@@ -176,6 +183,31 @@ class PetWindow(QWidget):
         self._lean += (self._lean_target - self._lean) * config.BODY_LEAN_EASE
         if self._needs_repaint():
             self.update()
+
+    def _update_mouse_follow(self, now: float) -> None:
+        """Drift the desk mouse toward the real cursor and rest the near hand on
+        it while the cursor is moving; let go when it goes still (issue #3)."""
+        if self._dragging or not config.FOLLOW_MOUSE or self._listener is None:
+            self._desk.set_mouse_offset_target(0.0, 0.0)
+            return
+        pos = self._listener.pointer_pos()
+        if pos is not None and pos != self._last_pointer:
+            self._last_pointer = pos
+            self._last_pointer_move = now
+        moving = (now - self._last_pointer_move) <= config.MOUSE_FOLLOW_IDLE_MS / 1000.0
+        if pos is not None and moving:
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None:
+                g = screen.geometry()
+                dx, dy = pointer_to_offset(pos[0], pos[1], g.x(), g.y(),
+                                           g.width(), g.height(),
+                                           config.MOUSE_FOLLOW_RANGE_X,
+                                           config.MOUSE_FOLLOW_RANGE_Y)
+                self._desk.set_mouse_offset_target(dx, dy)
+            mx, my, side = self._desk.mouse_target()
+            self._hands.track(side, (mx, my), now)
+        else:
+            self._desk.set_mouse_offset_target(0.0, 0.0)
 
     def _needs_repaint(self) -> bool:
         """Repaint only when the rendered scene would actually differ. An idle

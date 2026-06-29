@@ -14,9 +14,15 @@ class Desk:
     def __init__(self) -> None:
         self.keyboard = KeyboardGraphic()
         self.mouse = MouseGraphic()
-        self._mask = QRegion(QRect(*config.KEYBOARD_RECT)).united(
-            QRegion(QRect(*config.MOUSE_RECT))
-        )
+        # Mouse-follow offset (issue #3): the drawn mouse drifts within a small
+        # range, so the hit/visible mask must cover that inflated rect.
+        self._mouse_offset = [0.0, 0.0]
+        self._mouse_offset_target = [0.0, 0.0]
+        mx, my, mw, mh = config.MOUSE_RECT
+        rx = int(config.MOUSE_FOLLOW_RANGE_X) + 2
+        ry = int(config.MOUSE_FOLLOW_RANGE_Y) + 2
+        mouse_rect = QRect(mx - rx, my - ry, mw + 2 * rx, mh + 2 * ry)
+        self._mask = QRegion(QRect(*config.KEYBOARD_RECT)).united(QRegion(mouse_rect))
 
     # ---- lighting (visual feedback) ----
     def press_key(self, token: str) -> None:
@@ -41,20 +47,34 @@ class Desk:
         x, y, w, h = config.MOUSE_RECT
         cx = x + w * 0.5
         side = "left" if cx < config.DESK_ROT_CENTER[0] else "right"
-        return (cx, y + h * 0.5, side)
+        ox, oy = self._mouse_offset
+        return (cx + ox, y + h * 0.5 + oy, side)
+
+    def set_mouse_offset_target(self, dx: float, dy: float) -> None:
+        self._mouse_offset_target = [dx, dy]
 
     # ---- per-frame ----
     def update(self) -> None:
         self.keyboard.update()
         self.mouse.update()
+        e = config.MOUSE_FOLLOW_EASE
+        self._mouse_offset[0] += (self._mouse_offset_target[0] - self._mouse_offset[0]) * e
+        self._mouse_offset[1] += (self._mouse_offset_target[1] - self._mouse_offset[1]) * e
 
     def is_animating(self) -> bool:
-        return self.keyboard.is_animating() or self.mouse.is_animating()
+        if self.keyboard.is_animating() or self.mouse.is_animating():
+            return True
+        return (abs(self._mouse_offset_target[0] - self._mouse_offset[0]) > 0.5
+                or abs(self._mouse_offset_target[1] - self._mouse_offset[1]) > 0.5)
 
     def draw(self, painter) -> None:
         self._draw_rotated(painter, config.DESK_ROT_CENTER, self.keyboard.draw)
         mx, my, mw, mh = config.MOUSE_RECT
+        ox, oy = self._mouse_offset
+        painter.save()
+        painter.translate(ox, oy)            # mouse-follow drift (issue #3)
         self._draw_rotated(painter, (mx + mw / 2, my + mh / 2), self.mouse.draw)
+        painter.restore()
 
     @staticmethod
     def _draw_rotated(painter, center, draw_fn) -> None:

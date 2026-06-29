@@ -6,6 +6,7 @@ connection. Degrades gracefully: if pynput is missing or the OS denies input
 monitoring, Po still runs — it just won't react to other apps.
 """
 import sys
+from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
@@ -26,6 +27,14 @@ class GlobalInputListener(QObject):
         super().__init__(parent)
         self._kb = None
         self._ms = None
+        # Latest global cursor position, written from the listener thread on
+        # every move. We deliberately do NOT emit a signal per move (that floods
+        # at hundreds/sec); the frame loop samples this at most once per frame.
+        # A plain attribute assignment is atomic under the GIL, so no lock.
+        self._pointer: Optional[tuple[int, int]] = None
+
+    def pointer_pos(self) -> "Optional[tuple[int, int]]":
+        return self._pointer
 
     @property
     def available(self) -> bool:
@@ -51,7 +60,8 @@ class GlobalInputListener(QObject):
         try:
             self._kb = keyboard.Listener(on_press=self._on_key)
             self._ms = mouse.Listener(
-                on_click=self._on_click, on_scroll=self._on_scroll
+                on_click=self._on_click, on_scroll=self._on_scroll,
+                on_move=self._on_move,
             )
             # Start staggered (each .wait()s until running) so their startup
             # AXIsProcessTrusted checks don't run concurrently.
@@ -85,6 +95,9 @@ class GlobalInputListener(QObject):
 
     def _on_scroll(self, _x, _y, _dx, _dy) -> None:
         self.mouseScrolled.emit()
+
+    def _on_move(self, x, y) -> None:
+        self._pointer = (int(x), int(y))
 
     def stop(self) -> None:
         for listener in (self._kb, self._ms):
