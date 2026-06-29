@@ -11,6 +11,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPen, QPolygonF
 
 from . import config
+from .sprites import scale_for_display
 
 
 class _Hand:
@@ -48,8 +49,15 @@ class Hands:
         self.glove = glove_pixmap
         self._gw = glove_pixmap.width() * config.HAND_SCALE
         self._gh = glove_pixmap.height() * config.HAND_SCALE
+        self._glove_scaled = glove_pixmap        # replaced by prepare()
+        self._dpr = 1.0
         self.left = _Hand(config.LEFT_REST, config.LEFT_SHOULDER)
         self.right = _Hand(config.RIGHT_REST, config.RIGHT_SHOULDER)
+
+    def prepare(self, dpr: float) -> None:
+        """Pre-scale the glove to its device-pixel size once (issue #2)."""
+        self._dpr = dpr or 1.0
+        self._glove_scaled = scale_for_display(self.glove, self._gw, self._gh, self._dpr)
 
     def press_key(self, side: str, target, now) -> None:
         (self.left if side == "left" else self.right).activate(target, now)
@@ -76,15 +84,20 @@ class Hands:
         gw, gh = self._gw, self._gh
         x = tip_x - config.HAND_TIP_FX * gw
         y = tip_y - config.HAND_TIP_FY * gh
-        pm = self.glove
+        # Snap the glove origin to the device-pixel grid (issue #2).
+        dpr = self._dpr
+        x = round(x * dpr) / dpr
+        y = round(y * dpr) / dpr
+        pm = self._glove_scaled
+        src = QRectF(0, 0, pm.width(), pm.height())
         if mirror:
             p.save()
             p.translate(x + gw, y)
             p.scale(-1, 1)
-            p.drawPixmap(QRectF(0, 0, gw, gh), pm, QRectF(0, 0, pm.width(), pm.height()))
+            p.drawPixmap(QRectF(0, 0, gw, gh), pm, src)
             p.restore()
         else:
-            p.drawPixmap(QRectF(x, y, gw, gh), pm, QRectF(0, 0, pm.width(), pm.height()))
+            p.drawPixmap(QRectF(x, y, gw, gh), pm, src)
 
     @staticmethod
     def _draw_sleeve(p, shoulder, wrist) -> None:

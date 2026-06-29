@@ -16,6 +16,7 @@ from .animator import Animator
 from .desk import Desk
 from .hands import Hands
 from .resources import resource_path
+from .sprites import scale_for_display
 
 
 class PetWindow(QWidget):
@@ -35,6 +36,11 @@ class PetWindow(QWidget):
         # of rebuilding + re-applying it every frame (issue #1: idle CPU).
         self.setMask(self._build_static_mask())
         self._last_paint_pos: Optional[tuple[int, int]] = None
+
+        # Pre-scaled sprites (issue #2). Rebuilt whenever the display's device
+        # pixel ratio changes (e.g. dragged to another monitor).
+        self._sprite_dpr = 0.0
+        self._body_scaled = self._body
 
         # body lean (toward the active hand's target)
         self._lean = 0.0
@@ -100,7 +106,20 @@ class PetWindow(QWidget):
                 swept = swept.united(body.translated(dx, dy))
         return swept.united(self._desk.mask_region())
 
+    def _ensure_sprites(self) -> None:
+        """(Re)build the device-resolution sprites when the DPR changes."""
+        dpr = self.devicePixelRatioF()
+        if dpr == self._sprite_dpr:
+            return
+        self._sprite_dpr = dpr
+        bw, bh = self._body_size()
+        self._body_scaled = scale_for_display(self._body, bw, bh, dpr)
+        self._hands.prepare(dpr)
+
     def paintEvent(self, _event) -> None:
+        self._ensure_sprites()
+        dpr = self._sprite_dpr or 1.0
+
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
@@ -108,8 +127,12 @@ class PetWindow(QWidget):
         bw, bh = self._body_size()
         bx = config.PO_CENTER_X + self._lean - bw / 2
         by = config.PO_BODY_TOP + self._animator.offset_y
-        p.drawPixmap(QRectF(bx, by, bw, bh), self._body,
-                     QRectF(0, 0, self._body.width(), self._body.height()))
+        # Snap to the device-pixel grid so a 1:1 blit stays crisp and edges
+        # don't crawl as Po breathes through sub-pixel offsets (issue #2).
+        bx = round(bx * dpr) / dpr
+        by = round(by * dpr) / dpr
+        p.drawPixmap(QRectF(bx, by, bw, bh), self._body_scaled,
+                     QRectF(0, 0, self._body_scaled.width(), self._body_scaled.height()))
 
         self._desk.draw(p)
         self._hands.draw(p, self._lean)
