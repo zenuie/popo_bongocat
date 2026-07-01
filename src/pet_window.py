@@ -66,10 +66,9 @@ class PetWindow(QWidget):
     # ---- setup --------------------------------------------------------
     def _setup_window(self) -> None:
         self.setWindowFlags(
-            Qt.FramelessWindowHint
+            Qt.Window
+            | Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
-            | Qt.Tool
-            | Qt.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         always_show = getattr(Qt, "WA_MacAlwaysShowToolWindow", None)
