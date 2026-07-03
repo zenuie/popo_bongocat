@@ -33,8 +33,8 @@ NOD_DIP = 3.0             # px the body dips on a keystroke
 HAND_SCALE = 0.31
 LEFT_REST = (157, 164)
 RIGHT_REST = (261, 164)
-LEFT_SHOULDER = (150, 150)     # behind the keyboard (hidden); arms emerge here
-RIGHT_SHOULDER = (268, 150)
+LEFT_SHOULDER = (154, 112)     # visible body-side anchors; arms extend from Po
+RIGHT_SHOULDER = (264, 112)
 HAND_TAP_DIP = 6.0            # px a hand presses down on a tap
 HAND_EASE = 0.42             # how fast a hand moves toward its target (0..1)
 HAND_RETURN_MS = 600         # idle gap before a hand drifts back to rest
@@ -43,6 +43,10 @@ HAND_TIP_Y_MIN = 162         # never let a hand ride up above this (keeps off th
 # glove fingertip in sprite space (fraction of sprite w/h) — the press point
 HAND_TIP_FX = 0.50
 HAND_TIP_FY = 0.90
+# sleeve endpoint in sprite space (fraction of sprite w/h). Defaults to the old
+# `tip_y - glove_height * 0.5` position: 0.90 - 0.50 = 0.40.
+HAND_WRIST_FX = 0.50
+HAND_WRIST_FY = 0.40
 # sleeve (drawn forearm) half-widths at shoulder / wrist
 SLEEVE_HW_SHOULDER = 9.0
 SLEEVE_HW_WRIST = 14.0

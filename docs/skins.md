@@ -5,7 +5,8 @@ Po can wear a different character. A **skin** is a folder with two PNGs:
 ```
 <skin-name>/
 ├── po_body.png   # head + torso, arms removed, transparent background
-└── po_hand.png   # one glove/hand (mirrored in code for the other hand)
+├── po_hand.png   # one glove/hand (mirrored in code for the other hand)
+└── skin.json     # optional hand alignment metadata
 ```
 
 The keyboard and mouse are drawn procedurally, so a skin only replaces the
@@ -34,6 +35,26 @@ same shape and framing as the default Po art**:
 - `po_hand.png` — a single hand/glove on transparent background, sized similar
   to Po's glove (the default is ~130×132). It is drawn at `HAND_SCALE` and
   mirrored for the opposite hand.
+
+### Optional hand anchors
+
+If your hand art has different framing from the default glove, add `skin.json`
+next to the PNGs:
+
+```json
+{
+  "hand_tip": [0.5, 0.9],
+  "hand_wrist": [0.5, 0.4]
+}
+```
+
+Both points are fractions of `po_hand.png` width and height, from the top-left
+corner. `hand_tip` is the point that lands on the pressed key or mouse button.
+`hand_wrist` is where the sleeve connects to the glove. Missing values fall
+back to the default Po anchors.
+
+You can also adjust these points from **Tray → 設定… → 手部對齊** for user
+skins. The editor writes the same `skin.json` file.
 
 ### Slicing helper
 

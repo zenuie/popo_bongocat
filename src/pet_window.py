@@ -7,7 +7,7 @@ Global key/mouse input drives which hand reaches where and lights the key.
 import time
 from typing import Optional
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRect, QRectF
 from PySide6.QtGui import QBitmap, QGuiApplication, QPainter, QPixmap, QRegion, QTransform
 from PySide6.QtWidgets import QWidget
 
@@ -23,14 +23,14 @@ from .sprites import scale_for_display
 class PetWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self._body, glove = self._load_skin_pixmaps(config.ACTIVE_SKIN)
+        self._body, glove, hand_layout = self._load_skin(config.ACTIVE_SKIN)
 
         self._setup_window()
 
         self._animator = Animator(self)
         self._animator.frame.connect(self._on_frame)
         self._desk = Desk()
-        self._hands = Hands(glove)
+        self._hands = Hands(glove, hand_layout)
 
         # Mask the click/hit region ONCE to the area Po can ever occupy, instead
         # of rebuilding + re-applying it every frame (issue #1: idle CPU).
@@ -101,10 +101,13 @@ class PetWindow(QWidget):
         return region
 
     def _build_static_mask(self) -> QRegion:
-        """A single mask covering every position the body can occupy — it leans
-        +/-BODY_LEAN_MAX horizontally and floats/nods vertically — unioned with
-        the fixed desk. Recomputing this mask each frame was the dominant idle
-        cost, so we sweep the range once here and never call setMask again."""
+        """A single mask covering every visible position Po can occupy.
+
+        The window mask clips painting on some platforms, so it must include
+        the moving hands/sleeves as well as the body and fixed desk.
+        Recomputing this mask each frame was the dominant idle cost, so we
+        sweep the possible range once here and never call setMask again.
+        """
         body = self._build_body_mask()
         swept = QRegion()
         x_max = config.BODY_LEAN_MAX
@@ -113,7 +116,42 @@ class PetWindow(QWidget):
         for dx in range(-x_max, x_max + 1, 10):
             for dy in (y_lo, 0, y_hi):
                 swept = swept.united(body.translated(dx, dy))
-        return swept.united(self._desk.mask_region())
+        return swept.united(self._desk.mask_region()).united(self._build_hands_mask(y_lo, y_hi))
+
+    def _build_hands_mask(self, body_y_min: int, body_y_max: int) -> QRegion:
+        """Conservative mask for the animated hands and sleeves.
+
+        The hand targets live on the keyboard/mouse, but the sleeve starts at a
+        body-relative shoulder. This rectangle covers that full envelope so the
+        platform window mask does not cut off the sleeve during mouse reaches.
+        """
+        gw = self._hands.glove.width() * config.HAND_SCALE
+        gh = self._hands.glove.height() * config.HAND_SCALE
+        tip_fx, tip_fy = self._hands.hand_tip_fraction()
+
+        kx, ky, kw, kh = config.KEYBOARD_RECT
+        mx, my, mw, mh = config.MOUSE_RECT
+        target_min_x = min(kx, mx - config.MOUSE_FOLLOW_RANGE_X)
+        target_max_x = max(kx + kw, mx + mw + config.MOUSE_FOLLOW_RANGE_X)
+        target_min_y = min(ky, my - config.MOUSE_FOLLOW_RANGE_Y, config.HAND_TIP_Y_MIN)
+        target_max_y = max(ky + kh, my + mh + config.MOUSE_FOLLOW_RANGE_Y)
+
+        shoulder_min_x = min(config.LEFT_SHOULDER[0], config.RIGHT_SHOULDER[0]) - config.BODY_LEAN_MAX
+        shoulder_max_x = max(config.LEFT_SHOULDER[0], config.RIGHT_SHOULDER[0]) + config.BODY_LEAN_MAX
+        shoulder_min_y = min(config.LEFT_SHOULDER[1], config.RIGHT_SHOULDER[1]) + body_y_min
+        shoulder_max_y = max(config.LEFT_SHOULDER[1], config.RIGHT_SHOULDER[1]) + body_y_max
+
+        pad = max(config.SLEEVE_HW_SHOULDER, config.SLEEVE_HW_WRIST, 16)
+        left = min(target_min_x - tip_fx * gw, shoulder_min_x) - pad
+        right = max(target_max_x + (1 - tip_fx) * gw, shoulder_max_x) + pad
+        top = min(target_min_y - tip_fy * gh, shoulder_min_y) - pad
+        bottom = max(target_max_y + (1 - tip_fy) * gh, shoulder_max_y) + pad
+
+        left = max(0, int(left))
+        top = max(0, int(top))
+        right = min(config.CANVAS_WIDTH, int(right + 1))
+        bottom = min(config.CANVAS_HEIGHT, int(bottom + 1))
+        return QRegion(QRect(left, top, max(0, right - left), max(0, bottom - top)))
 
     def _apply_mask(self) -> None:
         """Set the click/hit mask, scaled from base coords into window coords."""
@@ -139,6 +177,9 @@ class PetWindow(QWidget):
         factor = self._sprite_factor or 1.0
 
         p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(self.rect(), Qt.transparent)
+        p.setCompositionMode(QPainter.CompositionMode_SourceOver)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
         # One transform scales the whole base-coord scene (issue #4); all
@@ -156,25 +197,27 @@ class PetWindow(QWidget):
                      QRectF(0, 0, self._body_scaled.width(), self._body_scaled.height()))
 
         self._desk.draw(p)
-        self._hands.draw(p, self._lean)
+        self._hands.draw(p, self._lean, self._animator.offset_y)
 
     # ---- skins (issue #5) ---------------------------------------------
     @staticmethod
-    def _load_skin_pixmaps(name: str):
-        """Return (body, glove) pixmaps for `name`, falling back to the default
-        skin if the named skin is missing or its images fail to load."""
+    def _load_skin(name: str):
+        """Return (body, glove, hand_layout), falling back to the default skin
+        if the named skin is missing or its images fail to load."""
         assets = skins.skin_assets(name) or skins.skin_assets(skins.DEFAULT)
         body, glove = QPixmap(assets[0]), QPixmap(assets[1])
+        layout_name = name if skins.skin_assets(name) is not None else skins.DEFAULT
         if body.isNull() or glove.isNull():
             assets = skins.skin_assets(skins.DEFAULT)
             body, glove = QPixmap(assets[0]), QPixmap(assets[1])
-        return body, glove
+            layout_name = skins.DEFAULT
+        return body, glove, skins.skin_hand_layout(layout_name)
 
     def set_skin(self, name: str) -> None:
-        body, glove = self._load_skin_pixmaps(name)
+        body, glove, hand_layout = self._load_skin(name)
         config.ACTIVE_SKIN = name
         self._body = body
-        self._hands.set_glove(glove)
+        self._hands.set_glove(glove, hand_layout)
         self._apply_mask()             # the body silhouette may differ
         self._sprite_factor = 0.0      # force a sprite rebuild at the new art
         self.update()

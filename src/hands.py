@@ -2,8 +2,8 @@
 
 Each hand eases toward a target (a pressed key, or the mouse, or its rest spot
 on the keyboard), taps down on activation, and drifts back to rest when idle.
-A simple cream sleeve is drawn from the (hidden, behind-keyboard) shoulder to
-the glove so the arm reads as connected. Perfect registration, no jitter.
+A simple cream sleeve is drawn from a body-side shoulder anchor to the glove so
+the arm reads as connected. Perfect registration, no jitter.
 """
 import time
 
@@ -51,8 +51,12 @@ class _Hand:
 
 
 class Hands:
-    def __init__(self, glove_pixmap) -> None:
+    def __init__(self, glove_pixmap, hand_layout=None) -> None:
         self.glove = glove_pixmap
+        self._hand_layout = hand_layout or {
+            "tip": (config.HAND_TIP_FX, config.HAND_TIP_FY),
+            "wrist": (config.HAND_WRIST_FX, config.HAND_WRIST_FY),
+        }
         self._gw = glove_pixmap.width() * config.HAND_SCALE
         self._gh = glove_pixmap.height() * config.HAND_SCALE
         self._glove_scaled = glove_pixmap        # replaced by prepare()
@@ -65,10 +69,12 @@ class Hands:
         self._dpr = dpr or 1.0
         self._glove_scaled = scale_for_display(self.glove, self._gw, self._gh, self._dpr)
 
-    def set_glove(self, glove_pixmap) -> None:
+    def set_glove(self, glove_pixmap, hand_layout=None) -> None:
         """Swap the glove art (issue #5: skins). The scaled copy is rebuilt by
         the next prepare()."""
         self.glove = glove_pixmap
+        if hand_layout is not None:
+            self._hand_layout = hand_layout
         self._gw = glove_pixmap.width() * config.HAND_SCALE
         self._gh = glove_pixmap.height() * config.HAND_SCALE
         self._glove_scaled = glove_pixmap
@@ -87,25 +93,31 @@ class Hands:
     def is_animating(self) -> bool:
         return self.left.is_animating() or self.right.is_animating()
 
-    # ---- drawing ----
-    def draw(self, painter, lean_x: float = 0.0) -> None:
-        self._draw_one(painter, self.right, True, lean_x)
-        self._draw_one(painter, self.left, False, lean_x)
+    def hand_tip_fraction(self) -> tuple[float, float]:
+        return self._hand_layout["tip"]
 
-    def _draw_one(self, p, hand, mirror, lean_x) -> None:
-        tip_x = hand.x
-        tip_y = hand.y + config.HAND_TAP_DIP * hand.tap
-        shoulder = (hand.shoulder[0] + lean_x, hand.shoulder[1])
-        wrist = (tip_x, tip_y - self._gh * 0.5)
+    # ---- drawing ----
+    def draw(self, painter, lean_x: float = 0.0, body_y: float = 0.0) -> None:
+        self.draw_sleeves(painter, lean_x, body_y)
+        self.draw_gloves(painter)
+
+    def draw_sleeves(self, painter, lean_x: float = 0.0, body_y: float = 0.0) -> None:
+        self._draw_sleeve_for_one(painter, self.right, lean_x, body_y)
+        self._draw_sleeve_for_one(painter, self.left, lean_x, body_y)
+
+    def draw_gloves(self, painter) -> None:
+        self._draw_glove_for_one(painter, self.right, True)
+        self._draw_glove_for_one(painter, self.left, False)
+
+    def _draw_sleeve_for_one(self, p, hand, lean_x, body_y) -> None:
+        x, y, gw, gh = self._glove_rect(hand)
+        shoulder = (hand.shoulder[0] + lean_x, hand.shoulder[1] + body_y)
+        wrist_fx, wrist_fy = self._hand_layout["wrist"]
+        wrist = (x + wrist_fx * gw, y + wrist_fy * gh)
         self._draw_sleeve(p, shoulder, wrist)
 
-        gw, gh = self._gw, self._gh
-        x = tip_x - config.HAND_TIP_FX * gw
-        y = tip_y - config.HAND_TIP_FY * gh
-        # Snap the glove origin to the device-pixel grid (issue #2).
-        dpr = self._dpr
-        x = round(x * dpr) / dpr
-        y = round(y * dpr) / dpr
+    def _draw_glove_for_one(self, p, hand, mirror) -> None:
+        x, y, gw, gh = self._glove_rect(hand)
         pm = self._glove_scaled
         src = QRectF(0, 0, pm.width(), pm.height())
         if mirror:
@@ -116,6 +128,19 @@ class Hands:
             p.restore()
         else:
             p.drawPixmap(QRectF(x, y, gw, gh), pm, src)
+
+    def _glove_rect(self, hand):
+        tip_x = hand.x
+        tip_y = hand.y + config.HAND_TAP_DIP * hand.tap
+        gw, gh = self._gw, self._gh
+        tip_fx, tip_fy = self._hand_layout["tip"]
+        x = tip_x - tip_fx * gw
+        y = tip_y - tip_fy * gh
+        # Snap the glove origin to the device-pixel grid (issue #2).
+        dpr = self._dpr
+        x = round(x * dpr) / dpr
+        y = round(y * dpr) / dpr
+        return x, y, gw, gh
 
     @staticmethod
     def _draw_sleeve(p, shoulder, wrist) -> None:

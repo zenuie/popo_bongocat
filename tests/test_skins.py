@@ -54,3 +54,66 @@ def test_default_assets_point_at_bundled_parts(skins_root):
     body, hand = skins.skin_assets("default")
     assert body.endswith(os.path.join("parts", skins.BODY_FILE))
     assert hand.endswith(os.path.join("parts", skins.HAND_FILE))
+
+
+def test_skin_hand_layout_reads_optional_metadata(skins_root):
+    folder = _make_skin(skins_root, "cat")
+    (folder / skins.META_FILE).write_text(
+        '{"hand_tip": [0.4, 0.8], "hand_wrist": [0.6, 0.2]}',
+        encoding="utf-8",
+    )
+
+    layout = skins.skin_hand_layout("cat")
+
+    assert layout["tip"] == (0.4, 0.8)
+    assert layout["wrist"] == (0.6, 0.2)
+
+
+def test_skin_hand_layout_clamps_metadata(skins_root):
+    folder = _make_skin(skins_root, "cat")
+    (folder / skins.META_FILE).write_text(
+        '{"hand_tip": [-1, 2], "hand_wrist": [0.25, 0.75]}',
+        encoding="utf-8",
+    )
+
+    layout = skins.skin_hand_layout("cat")
+
+    assert layout["tip"] == (0.0, 1.0)
+    assert layout["wrist"] == (0.25, 0.75)
+
+
+def test_skin_hand_layout_falls_back_for_invalid_metadata(skins_root):
+    folder = _make_skin(skins_root, "cat")
+    (folder / skins.META_FILE).write_text("not json", encoding="utf-8")
+
+    assert skins.skin_hand_layout("cat") == skins.default_hand_layout()
+
+
+def test_save_skin_hand_layout_writes_user_skin_metadata(skins_root):
+    folder = _make_skin(skins_root, "cat")
+
+    ok = skins.save_skin_hand_layout("cat", {
+        "tip": (0.45, 0.85),
+        "wrist": (0.55, 0.35),
+    })
+
+    assert ok is True
+    assert (folder / skins.META_FILE).read_text(encoding="utf-8") == (
+        '{\n'
+        '  "hand_tip": [\n'
+        '    0.45,\n'
+        '    0.85\n'
+        '  ],\n'
+        '  "hand_wrist": [\n'
+        '    0.55,\n'
+        '    0.35\n'
+        '  ]\n'
+        '}\n'
+    )
+
+
+def test_save_skin_hand_layout_rejects_default_skin(skins_root):
+    assert skins.save_skin_hand_layout("default", {
+        "tip": (0.45, 0.85),
+        "wrist": (0.55, 0.35),
+    }) is False
